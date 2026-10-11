@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import plex
+from . import favicon, plex
 from .config import Config, CreatorConfig
 from .harvest import MAX_ATTEMPTS, Harvester
 from .likes import LikeStore, check_likes, post_files
@@ -376,10 +376,16 @@ def _page(index: Index, page: str, content: str, rows: list[Row], missing: list[
     )
 
 
+ICONS = {
+    "/favicon.svg": (favicon.SVG, "image/svg+xml"),
+    "/favicon.ico": (favicon.TOUCH_PNG, "image/png"),
+    "/apple-touch-icon.png": (favicon.TOUCH_PNG, "image/png"),
+}
+
 PAGE = """<!doctype html>
 <html lang="no"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{title}</title>
+""" + favicon.LINKS + """<title>{title}</title>
 <style>
 :root {{ --bg:#f6f5f2; --fg:#1d1d1f; --muted:#6b6b70; --card:#fff; --line:#e4e2dd; --accent:#e5622b;
   --yes:#1f7a3f; --yes-bg:#e3f3e8; --no:#8a5a00; --no-bg:#fbefd5; --unk:#6b6b70; --unk-bg:#ecebe8;
@@ -516,12 +522,13 @@ def serve(cfg: Config, port: int) -> ThreadingHTTPServer:
     index = Index(cfg)
 
     class Handler(BaseHTTPRequestHandler):
-        def _send(self, code: int, body: str = "", ctype: str = "text/html; charset=utf-8", headers=()):
-            data = body.encode()
+        def _send(self, code: int, body: str | bytes = "", ctype: str = "text/html; charset=utf-8", headers=(),
+                  cache: str = "no-store"):
+            data = body.encode() if isinstance(body, str) else body
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-store")
+            self.send_header("Cache-Control", cache)
             for k, v in headers:
                 self.send_header(k, v)
             self.end_headers()
@@ -548,6 +555,9 @@ def serve(cfg: Config, port: int) -> ThreadingHTTPServer:
                 except Exception as e:
                     log.exception("Rendering index failed")
                     self._send(500, f"<p>Kunne ikke lage siden: {_e(e)}</p>")
+            elif self.path in ICONS:
+                # the pages carry the icon inline; these are for browsers that ask by path
+                self._send(200, *ICONS[self.path], cache="public, max-age=604800")
             elif self.path == "/health":
                 self._send(200, "ok", "text/plain")
             else:

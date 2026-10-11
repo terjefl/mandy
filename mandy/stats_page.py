@@ -8,6 +8,7 @@ import html
 import json
 import time
 
+from . import favicon
 from .config import Config, CreatorConfig
 from .stats import aggregate, collect
 
@@ -156,7 +157,7 @@ def render_stats(cfg: Config, creator: CreatorConfig) -> str:
 PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{name} in numbers</title>
+""" + favicon.LINKS + """<title>{name} in numbers</title>
 <style>
 :root {{ color-scheme: light; --bg:#f6f5f2; --card:#fcfcfb; --fg:#0b0b0b; --muted:#52514e; --line:#e4e2dd;
   --grid:#ecebe7; --patreon:#2a78d6; --video:#eb6834; }}

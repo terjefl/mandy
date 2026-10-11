@@ -82,6 +82,7 @@ def test_stats_page_is_public_safe_and_in_english(tmp_path, monkeypatch):
     monkeypatch.setattr(stats_page, "collect", lambda cfg, creator: items)
     html = stats_page.render_stats(cfg, cfg.creators[0])
     assert "<title>Mandy Cane Lane in numbers</title>" in html and 'lang="en"' in html
+    assert 'rel="icon"' in html and 'rel="apple-touch-icon"' in html
     assert "2 videos since Oct 2022" in html and "2 h 20 m" in html  # Patreon total: 50 + 90 minutes
     assert "plex" not in html.casefold() and "watched" not in html.casefold()
     assert len(re.findall(r'class="hit"', html)) == 4  # Oct 2022 .. Jan 2023

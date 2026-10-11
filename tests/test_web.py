@@ -23,6 +23,12 @@ def test_chronological_page_is_newest_first_across_shows(tmp_path, monkeypatch):
     titles = re.findall(r'<span class="show">[^<]*</span> ([^<]*)</td>', html)
     assert titles == ["Cube", "Dignity", "Big Fat Quiz", "Mugging"]
     assert '<body class="f-unwatched" data-page="chrono">' in html
+    assert '<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,' in html
+
+
+def test_icon_paths_serve_the_icon():
+    assert web.ICONS["/favicon.ico"][0].startswith(b"\x89PNG") and web.ICONS["/favicon.ico"][1] == "image/png"
+    assert web.ICONS["/favicon.svg"][0].startswith("<svg") and web.ICONS["/favicon.svg"][1] == "image/svg+xml"
 
 
 def test_youtube_episodes_in_the_creators_library_are_listed_with_a_youtube_link(tmp_path, monkeypatch):
@@ -82,6 +88,7 @@ def test_public_video_list_has_links_but_nothing_private(tmp_path, monkeypatch):
     assert "plex" not in html.casefold() and "Gitt opp" not in html and "dailymotion" not in html
     assert "watched" not in html.casefold() and "liked" not in html.casefold()
     assert "<\\/script>" in html and "ARK </script>" not in html  # titles can't break out of the data block
+    assert 'rel="icon"' in html and 'rel="apple-touch-icon"' in html  # inline: the public path needs no other
 
 
 def test_merge_stale_shows_only_folds_shows_that_wholly_belong_elsewhere(tmp_path, monkeypatch):

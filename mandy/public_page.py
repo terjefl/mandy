@@ -10,6 +10,7 @@ import json
 import re
 import time
 
+from . import favicon
 from .config import Config, CreatorConfig
 from .stats import load_youtube
 
@@ -62,7 +63,7 @@ def render_videos(rows: list, cfg: Config, creator: CreatorConfig) -> str:
 PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{name}: all videos</title>
+""" + favicon.LINKS + """<title>{name}: all videos</title>
 <style>
 :root {{ color-scheme: light; --bg:#f6f5f2; --card:#fcfcfb; --fg:#0b0b0b; --muted:#52514e; --line:#e4e2dd;
   --accent:#c4471a; --patreon:#2a78d6; --video:#eb6834; }}
