@@ -31,6 +31,9 @@ class CreatorConfig:
     title_overrides: dict[str, str] = field(default_factory=dict)
     # The creator's YouTube channel (e.g. https://www.youtube.com/@MandyCaneLane), for the statistics page
     youtube_url: str | None = None
+    # Where Pinchflat puts the channel's videos, as this container sees it: their .nfo files get
+    # the date in a form Plex reads
+    youtube_dir: str | None = None
 
     @property
     def campaign_url(self) -> str:

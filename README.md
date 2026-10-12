@@ -55,7 +55,7 @@ One **TV Shows** library ("Mandy") with the **Plex NFO Series** agent and the **
 - `library_dir` as Plex sees it (`/Media01/Mandy`): the Patreon shows, written by this tool.
 - Pinchflat's folder for her channel (`/Media01/Pinchflat/TV/Mandy Cane Lane - YouTube`): the show "Mandy Cane Lane - YouTube", a season per year. Pinchflat's media profile for her writes NFO files, with the template `/TV/{{ source_custom_name }}/{{ source_custom_name }}/{{ season_by_year__episode_by_date_and_index }} - {{ title }} [{{ id }}].{{ ext }}`.
 
-The agent reads the `.nfo` sidecars, so titles, descriptions, dates, posters and episode thumbnails all show up, and Plex doesn't try to match the folders against real TV shows. This tool only looks at, cleans up and lists as Patreon the files under `library_dir` that it downloaded itself; Pinchflat's folder is left alone.
+The agent reads the `.nfo` sidecars, so titles, descriptions, dates, posters and episode thumbnails all show up, and Plex doesn't try to match the folders against real TV shows. This tool only looks at, cleans up and lists as Patreon the files under `library_dir` that it downloaded itself. In Pinchflat's folder (`youtube_dir`, mounted read-write) it touches one thing: Pinchflat writes the date in its `.nfo` files as `2026-10-12 00:00:00Z`, which Plex reads as no date, so a new video sorts nowhere. Each run sets such dates to `2026-10-12` (and the show to the folder's) and has Plex re-read the episode.
 
 ## Throttling
 

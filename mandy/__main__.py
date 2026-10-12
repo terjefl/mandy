@@ -11,6 +11,7 @@ from .config import Config, load_config
 from .harvest import Harvester, LoginExpired, heartbeat, refresh_plex, same_file
 from .likes import check_likes, mark_liked_watched
 from .stats import refresh_youtube, youtube_due
+from .youtube_nfo import fix_youtube_nfos
 
 log = logging.getLogger("mandy")
 
@@ -28,6 +29,10 @@ def run_once(cfg: Config) -> bool:
     downloaded = failed = pending = 0
     errors: list[str] = []
     for creator in cfg.creators:
+        try:
+            fix_youtube_nfos(cfg, creator)
+        except Exception as e:  # Pinchflat's files; never fail the Patreon run over them
+            log.warning("Fixing YouTube .nfo files failed: %s", e)
         harvester = Harvester(cfg, creator)
         try:
             result = harvester.run()

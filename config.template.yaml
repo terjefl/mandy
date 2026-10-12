@@ -34,6 +34,9 @@ creators:
     folder: ""
     # YouTube channel, for the statistics page (/statistikk): hours of video per month and year.
     youtube_url: https://www.youtube.com/@MandyCaneLane
+    # Pinchflat's folder for the channel (mounted read-write). Pinchflat writes the date in its
+    # .nfo files as "2026-10-12 00:00:00Z", which Plex reads as no date; each run sets it right.
+    youtube_dir: /youtube
     # Only download posts published on or after this date (omit for the whole archive).
     since: 2026-09-01
     # Cap per run, so a large backlog is spread over several runs (0 = no cap).

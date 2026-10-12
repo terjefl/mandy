@@ -11,3 +11,4 @@ services:
       - ./config:/config:ro    # config.yaml + cookies.txt
       - ./data:/data
       - /path/to/media/Mandy:/library   # Plex: /Media01/Mandy
+      - "/path/to/media/Pinchflat/TV/Mandy Cane Lane - YouTube:/youtube"   # youtube_dir

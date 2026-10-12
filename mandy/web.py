@@ -57,6 +57,18 @@ class Row:
         return f"S{self.season:02d}E{self.episode:02d}" if self.season < 1000 else f"{self.season} #{self.episode}"
 
 
+# Pinchflat's "season by year, episode by date and index": s2026e101299 is 12 October 2026
+_PINCHFLAT_DATE = re.compile(r"^s(\d{4})e(\d{2})(\d{2})\d{2}\b")
+
+
+def _date_from_name(name: str) -> str:
+    """The date in a Pinchflat file name, for a video Plex has no date for (yet)."""
+    m = _PINCHFLAT_DATE.match(name)
+    if not m or not (1 <= int(m[2]) <= 12 and 1 <= int(m[3]) <= 31):
+        return ""
+    return f"{m[1]}-{m[2]}-{m[3]}"
+
+
 class Index:
     def __init__(self, cfg: Config):
         self.cfg = cfg
@@ -111,7 +123,7 @@ class Index:
             season=ep.season,
             episode=ep.episode,
             title=ep.title,
-            aired=ep.aired,
+            aired=ep.aired or _date_from_name(ep.path.name),
             watched=ep.watched,
             liked=None,
             patreon_url="",
