@@ -6,9 +6,9 @@ from pathlib import Path
 
 from yt_dlp.networking.exceptions import TransportError
 
-from . import plex
+from . import media
 from .config import Config, load_config
-from .harvest import Harvester, LoginExpired, heartbeat, refresh_plex, same_file
+from .harvest import Harvester, LoginExpired, heartbeat, refresh_library, same_file
 from .likes import check_likes, mark_liked_watched
 from .stats import refresh_youtube, youtube_due
 from .youtube_nfo import fix_youtube_nfos
@@ -51,7 +51,7 @@ def run_once(cfg: Config) -> bool:
         downloaded += len(result.downloaded)
         failed += len(result.failed)
         pending += result.pending
-        if cfg.plex:
+        if media.enabled(cfg):
             try:
                 check_likes(cfg, creator)
                 mark_liked_watched(cfg, creator)
@@ -66,7 +66,7 @@ def run_once(cfg: Config) -> bool:
             except Exception as e:  # loudness is a nicety; never fail the run over it
                 log.warning("Measuring loudness failed: %s", e)
     if downloaded:
-        refresh_plex(cfg)
+        refresh_library(cfg)
     msg = f"{downloaded} downloaded, {failed} failed, {pending} pending"
     if errors:
         msg += " | " + "; ".join(errors)
@@ -77,7 +77,7 @@ def run_once(cfg: Config) -> bool:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="mandy", description="Mandy Cane Lane's Patreon videos in a Plex TV library")
+    parser = argparse.ArgumentParser(prog="mandy", description="Mandy Cane Lane's Patreon videos in a Plex or Jellyfin TV library")
     parser.add_argument("--config", type=Path, default=Path("config.yaml"))
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("check", help="verify the Patreon cookie")
@@ -91,7 +91,7 @@ def main() -> None:
     )
     p_likes = sub.add_parser("likes", help="refresh which posts you have liked on Patreon")
     p_likes.add_argument("--all", action="store_true", help="check every downloaded post now")
-    p_likes.add_argument("--mark-watched", action="store_true", help="then mark liked episodes as watched in Plex")
+    p_likes.add_argument("--mark-watched", action="store_true", help="then mark liked episodes as watched on the media server")
     p_refile = sub.add_parser("refile", help="move downloaded posts to where their title puts them now")
     p_refile.add_argument("post_ids", nargs="*")
     p_refile.add_argument("--all", action="store_true", help="every downloaded post that isn't where it belongs")
@@ -135,8 +135,8 @@ def main() -> None:
                 print(f"{creator.creator}: {len(harvester.remove_orphans())} leftover file(s) removed")
             print(f"{creator.creator}: {harvester.refresh_plots()} description(s) updated")
     elif args.command == "likes":
-        if not cfg.plex:
-            raise SystemExit("likes needs a `plex` section with url, token and section_id")
+        if not media.enabled(cfg):
+            raise SystemExit("likes needs a `jellyfin` or `plex` section")
         for creator in cfg.creators:
             print(f"{creator.creator}: checked {check_likes(cfg, creator, all_posts=args.all)} post(s)")
             if args.mark_watched:
@@ -159,26 +159,26 @@ def main() -> None:
                 targets.add(new)
                 print(f"{post_id}: {old.relative_to(harvester.library_dir)}\n  -> {new.relative_to(harvester.library_dir)}{clash}")
         print(f"{len(moved)} file(s) {'would move' if args.dry_run else 'moved'}")
-        if moved and not args.dry_run and cfg.plex:
-            refresh_plex(cfg)
-            # Plex recognises a moved file and keeps its old title; have it re-read the new .nfo
+        if moved and not args.dry_run and media.enabled(cfg):
+            refresh_library(cfg)
+            # The server may keep a moved file's old title; have it re-read the new .nfo
             wanted, deadline = {new for _, new in moved}, time.time() + 300
             while wanted and time.time() < deadline:
                 time.sleep(15)
-                for ep in plex.episodes(cfg):
+                for ep in media.episodes(cfg):
                     if ep.path in wanted:
-                        plex.refresh_metadata(cfg, ep.rating_key)
+                        media.refresh_metadata(cfg, ep.item_id)
                         wanted.discard(ep.path)
-            print(f"Plex re-read {len(moved) - len(wanted)} episode(s)" + (f"; {len(wanted)} not found yet" if wanted else ""))
+            print(f"{media.name(cfg)} re-read {len(moved) - len(wanted)} episode(s)" + (f"; {len(wanted)} not found yet" if wanted else ""))
             time.sleep(15)
             # Plex may keep a moved episode under its old show; fold such shows into the right one
             nfo_shows = {}
-            for ep in plex.episodes(cfg):
+            for ep in media.episodes(cfg):
                 nfo = ep.path.with_suffix(".nfo")
                 if nfo.exists():
                     nfo_shows[ep.path] = ET.parse(nfo).getroot().findtext("showtitle") or ep.show
-            for old_show, new_show in plex.merge_stale_shows(cfg, nfo_shows):
-                print(f"Plex: the show {old_show!r} is now {new_show!r}")
+            for old_show, new_show in media.merge_stale_shows(cfg, nfo_shows):
+                print(f"{media.name(cfg)}: the show {old_show!r} is now {new_show!r}")
     elif args.command == "youtube-stats":
         for creator in cfg.creators:
             if creator.youtube_url:
@@ -194,7 +194,7 @@ def main() -> None:
     elif args.command == "run":
         raise SystemExit(0 if run_once(cfg) else 1)
     elif args.command == "loop":
-        if cfg.web_port and cfg.plex:
+        if cfg.web_port and media.enabled(cfg):
             from .web import serve
 
             serve(cfg, cfg.web_port)

@@ -3,25 +3,14 @@
 import json
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
 from .config import Config
+from .episode import Episode
 
 
-@dataclass
-class PlexEpisode:
-    rating_key: str
-    show: str
-    season: int
-    episode: int
-    title: str
-    aired: str  # YYYY-MM-DD
-    watched: bool
-    path: Path  # as this container sees it; for other sources, as Plex sees it
-    local: bool = True  # under library_path, i.e. one of ours
-    duration: float = 0.0  # seconds
+NAME = "Plex"
 
 
 def _get(cfg: Config, path: str) -> dict:
@@ -33,7 +22,7 @@ def _get(cfg: Config, path: str) -> dict:
         return json.loads(resp.read())["MediaContainer"]
 
 
-def episodes(cfg: Config, include_other: bool = False) -> list[PlexEpisode]:
+def episodes(cfg: Config, include_other: bool = False) -> list[Episode]:
     """Episodes in the Plex library whose files are under library_path. With include_other, also
     the rest of the library (Mandy's YouTube videos from Pinchflat), as `local=False` with Plex's
     own path."""
@@ -47,8 +36,8 @@ def episodes(cfg: Config, include_other: bool = False) -> list[PlexEpisode]:
                 if not local and not include_other:
                     continue
                 result.append(
-                    PlexEpisode(
-                        rating_key=str(item["ratingKey"]),
+                    Episode(
+                        item_id=str(item["ratingKey"]),
                         show=item.get("grandparentTitle", ""),
                         season=int(item.get("parentIndex", 0)),
                         episode=int(item.get("index", 0)),
@@ -73,9 +62,9 @@ def machine_id(url: str, token: str) -> str:
         return json.loads(resp.read())["MediaContainer"]["machineIdentifier"]
 
 
-def web_link(cfg: Config, rating_key: str) -> str:
+def web_link(cfg: Config, item_id: str) -> str:
     server = machine_id(cfg.plex.url, cfg.plex.token)
-    key = urllib.parse.quote(f"/library/metadata/{rating_key}", safe="")
+    key = urllib.parse.quote(f"/library/metadata/{item_id}", safe="")
     return f"https://app.plex.tv/desktop/#!/server/{server}/details?key={key}"
 
 
@@ -91,6 +80,12 @@ def refresh_metadata(cfg: Config, rating_key: str) -> None:
     query = urllib.parse.urlencode({"X-Plex-Token": cfg.plex.token})
     url = f"{cfg.plex.url.rstrip('/')}/library/metadata/{rating_key}/refresh?{query}"
     urllib.request.urlopen(urllib.request.Request(url, method="PUT"), timeout=30).read()
+
+
+def scan(cfg: Config) -> None:
+    """Have Plex scan the library section for new and moved files."""
+    query = urllib.parse.urlencode({"X-Plex-Token": cfg.plex.token})
+    urllib.request.urlopen(f"{cfg.plex.url.rstrip('/')}/library/sections/{cfg.plex.section_id}/refresh?{query}", timeout=30).read()
 
 
 def merge_stale_shows(cfg: Config, show_titles: dict[Path, str]) -> list[tuple[str, str]]:

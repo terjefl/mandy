@@ -1,6 +1,7 @@
 import json
 import re
 
+from mandy.episode import Episode
 from mandy import plex, stats, stats_page
 from mandy.config import Config, CreatorConfig, PlexConfig
 
@@ -29,8 +30,8 @@ def test_patreon_post_in_parts_counts_once(tmp_path, monkeypatch):
     (cfg.data_dir / "M").mkdir(parents=True)
     (cfg.data_dir / "M" / "state.json").write_text(json.dumps(state))
     monkeypatch.setattr(plex, "episodes", lambda cfg, section=None, include_other=False: [
-        plex.PlexEpisode("1", "S", 1, 1, "a", "", False, lib / "a - pt1.mp4", duration=1500),
-        plex.PlexEpisode("2", "S", 1, 2, "a", "", False, lib / "a - pt2.mp4", duration=1300),
+        Episode("1", "S", 1, 1, "a", "", False, lib / "a - pt1.mp4", duration=1500),
+        Episode("2", "S", 1, 2, "a", "", False, lib / "a - pt2.mp4", duration=1300),
     ])
     assert stats.collect(cfg, cfg.creators[0]) == [("patreon", "2023-01-01", 2800)]
 
@@ -94,7 +95,7 @@ def test_patreon_post_without_saved_date_uses_the_plex_date(tmp_path, monkeypatc
     (cfg.data_dir / "M").mkdir(parents=True)
     (cfg.data_dir / "M" / "state.json").write_text(json.dumps({"posts": {"1": {"status": "done", "files": [str(f)]}}}))
     monkeypatch.setattr(plex, "episodes", lambda cfg, include_other=False: [
-        plex.PlexEpisode("1", "S", 1, 1, "x", "2026-08-14", False, f, duration=1200)])
+        Episode("1", "S", 1, 1, "x", "2026-08-14", False, f, duration=1200)])
     assert stats.collect(cfg, cfg.creators[0]) == [("patreon", "2026-08-14", 1200)]
 
 

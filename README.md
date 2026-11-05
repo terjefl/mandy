@@ -31,7 +31,7 @@ Videos are downloaded as-is from Patreon (typically 1080p H.264/AAC), so Plex ca
 
 1. **Cookies:** log in to patreon.com in a browser, export cookies for `patreon.com` in Netscape format (for example with the *Get cookies.txt LOCALLY* extension) and save the file as `config/cookies.txt`.
    The session lasts several months, but logging out of that browser session kills it. Use a private window and close it without logging out.
-2. **Config:** copy `config.template.yaml` to `config/config.yaml` and fill in the Plex part.
+2. **Config:** copy `config.template.yaml` to `config/config.yaml` and fill in the Plex or Jellyfin part.
 3. **Run:** use `compose.example.yml`. The container checks for new posts every `interval_minutes`.
 
 Commands (`docker exec mandy mandy --config /config/config.yaml <command>`):
@@ -41,7 +41,7 @@ Commands (`docker exec mandy mandy --config /config/config.yaml <command>`):
 | `check` | Verify the cookie |
 | `plan -n 20` | Show how the latest 20 posts would be named, without downloading anything |
 | `refresh-art` | Rewrite show titles, posters and backgrounds (after changing `show_title_template`) |
-| `likes [--all] [--mark-watched]` | Refresh which posts you have liked on Patreon; optionally mark liked episodes as watched in Plex |
+| `likes [--all] [--mark-watched]` | Refresh which posts you have liked on Patreon; optionally mark liked episodes as watched on the media server |
 | `refresh-plots [--remove-orphans]` | Fill empty episode descriptions from the posts and clean the rest; optionally delete sidecars left without a video |
 | `refile <post-id>…` | Move downloaded posts to where their title puts them now (after a parsing fix or a new `show_aliases` entry) |
 | `youtube-stats [--all]` | Update the YouTube list for the statistics page |
@@ -57,19 +57,25 @@ One **TV Shows** library ("Mandy") with the **Plex NFO Series** agent and the **
 
 The agent reads the `.nfo` sidecars, so titles, descriptions, dates, posters and episode thumbnails all show up, and Plex doesn't try to match the folders against real TV shows. This tool only looks at, cleans up and lists as Patreon the files under `library_dir` that it downloaded itself. In Pinchflat's folder (`youtube_dir`, mounted read-write) it touches one thing: Pinchflat writes the date in its `.nfo` files as `2026-10-12 00:00:00Z`, which Plex reads as no date, so a new video sorts nowhere. Each run sets such dates to `2026-10-12` (and the show to the folder's) and has Plex re-read the episode.
 
+## Jellyfin
+
+Instead of Plex, the tool can use Jellyfin for the same things: the episode list, watched status, links, library scans and re-reading an episode's `.nfo`. A `jellyfin` section with an `api_key` in the config switches it over; without one, `plex` is used. Both can stay in the config, so going back is a matter of removing the `jellyfin` section.
+
+The library needs the **Nfo** metadata reader on (and online metadata fetchers off), so the shows, titles and dates come from the sidecars as they do in Plex. Watched status in Jellyfin belongs to a user: `user_id` is the one whose status the index page shows and sets. A video in parts is one item in Jellyfin; its parts are listed with the item's id, as Plex does. Jellyfin builds shows from the folders, so the Plex-only clean-up after `refile` (merging a show left behind) is not needed there.
+
 ## Throttling
 
 `rate_limit` caps the download speed and `pause_seconds` adds a random pause between videos, and `max_downloads_per_run` spreads a large backlog over several runs. Downloads are otherwise far faster than real-time playback (an hour of video in about two minutes), which is an unusual pattern for one account.
 
 ## Index page
 
-The container serves an index page on `web_port` (default 8000), at mandy.flagan.net: every video, Patreon and YouTube, grouped by show (or newest first on `/kronologisk`), with links to the Patreon post or YouTube video and the Plex episode, whether you have watched it in Plex, and whether you have liked it on Patreon. Filters narrow it to what you haven't watched or liked, to missing posts, or to one source. "Watched, not liked" is listed at the top, so you can like what you have seen. Patreon posts that are missing (failed, queued, throttled) are listed where their episode would be.
+The container serves an index page on `web_port` (default 8000), at mandy.flagan.net: every video, Patreon and YouTube, grouped by show (or newest first on `/kronologisk`), with links to the Patreon post or YouTube video and the episode on the media server (Plex or Jellyfin), whether you have watched it there, and whether you have liked it on Patreon. Filters narrow it to what you haven't watched or liked, to missing posts, or to one source. "Watched, not liked" is listed at the top, so you can like what you have seen. Patreon posts that are missing (failed, queued, throttled) are listed where their episode would be.
 
 The page has no login of its own; it is behind Cloudflare Access.
 
 Downloads never play through Patreon's player, so her statistics never show you watching; a like is the signal she does get. Liking can't be automated: Patreon rejects like requests without the web app's CSRF token. Like status is read-only: each run checks every watched-but-not-liked post, plus 20 others not checked in the last week. The page's button re-checks the watched ones on demand. `likes --all` checks every downloaded post at once. YouTube doesn't let anyone else read your likes, so YouTube rows link to the video instead.
 
-A like means you have seen the episode, often before it was downloaded, so liked episodes are marked as watched in Plex after each run (`likes --all --mark-watched` does it now). Each episode is marked once, so setting one back to unwatched in Plex sticks.
+A like means you have seen the episode, often before it was downloaded, so liked episodes are marked as watched on the media server after each run (`likes --all --mark-watched` does it now). Each episode is marked once, so setting one back to unwatched there sticks.
 
 ## Statistics page
 

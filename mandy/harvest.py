@@ -19,7 +19,7 @@ from yt_dlp.networking import Request
 from yt_dlp.networking.exceptions import HTTPError, RequestError
 from yt_dlp.utils import DownloadError, parse_bytes
 
-from . import plex
+from . import media
 from .config import Config, CreatorConfig
 from .library import Episode, set_episode_plot, write_episode_nfo, write_show_nfo
 from .poster import make_poster
@@ -618,11 +618,11 @@ class Harvester:
                     if set_episode_plot(nfo, plot):
                         changed.append(Path(file))
                         log.info("Updated description: %s", nfo.name)
-        if changed and self.cfg.plex:
-            keys = {ep.path: ep.rating_key for ep in plex.episodes(self.cfg)}
+        if changed and media.enabled(self.cfg):
+            keys = {ep.path: ep.item_id for ep in media.episodes(self.cfg)}
             for file in changed:
                 if file in keys:
-                    plex.refresh_metadata(self.cfg, keys[file])
+                    media.refresh_metadata(self.cfg, keys[file])
         return len(changed)
 
     def remove_orphans(self) -> list[Path]:
@@ -841,16 +841,15 @@ def _post_id(entry: dict) -> str:
     return match.group(1)
 
 
-def refresh_plex(cfg: Config) -> None:
-    plex = cfg.plex
-    if not plex:
+def refresh_library(cfg: Config) -> None:
+    """Have the media server scan the library for new and moved files."""
+    if not media.enabled(cfg):
         return
-    url = f"{plex.url.rstrip('/')}/library/sections/{plex.section_id}/refresh?X-Plex-Token={plex.token}"
     try:
-        urllib.request.urlopen(url, timeout=30).read()
-        log.info("Triggered Plex library scan")
+        media.scan(cfg)
+        log.info("Triggered %s library scan", media.name(cfg))
     except Exception as e:
-        log.warning("Plex refresh failed: %s", e)
+        log.warning("%s library scan failed: %s", media.name(cfg), e)
 
 
 def heartbeat(url: str | None, ok: bool, msg: str) -> None:

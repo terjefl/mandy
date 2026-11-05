@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from mandy.episode import Episode
 from mandy import plex, web, youtube_nfo
 from mandy.config import Config, CreatorConfig, PlexConfig
 
@@ -44,9 +45,9 @@ def test_pinchflat_date_and_show_are_set_right_and_plex_rereads_it(tmp_path, mon
     cfg, creator, new, old = setup(tmp_path)
     plex_path = Path("/Media01/Pinchflat/TV/Mandy Cane Lane - YouTube/Mandy Cane Lane - YouTube/Season 2026")
     monkeypatch.setattr(plex, "episodes", lambda cfg, include_other=False: [
-        plex.PlexEpisode("28382", "Mandy Cane Lane - YouTube", 2026, 101299, "SEAN LOCK", "", False,
+        Episode("28382", "Mandy Cane Lane - YouTube", 2026, 101299, "SEAN LOCK", "", False,
                          plex_path / (new.stem + ".mp4"), local=False),
-        plex.PlexEpisode("27341", "Mandy Cane Lane - YouTube", 2026, 100999, "WALLY", "2026-10-09", True,
+        Episode("27341", "Mandy Cane Lane - YouTube", 2026, 100999, "WALLY", "2026-10-09", True,
                          plex_path / (old.stem + ".mp4"), local=False),
     ])
     refreshed = []

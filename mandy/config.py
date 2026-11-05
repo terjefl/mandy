@@ -14,6 +14,16 @@ class PlexConfig:
 
 
 @dataclass
+class JellyfinConfig:
+    url: str  # for the API, e.g. http://10.11.12.16:8096
+    api_key: str
+    user_id: str  # whose watched status the index page shows and sets
+    library_ids: list[str]  # the libraries with the creator's shows (Patreon and YouTube)
+    library_path: str = "/media/Mandy"  # library_dir as Jellyfin sees it
+    web_url: str | None = None  # for links in the browser, e.g. https://jellyfin.flagan.net; defaults to url
+
+
+@dataclass
 class CreatorConfig:
     creator: str  # slug from patreon.com/c/<creator>
     creator_name: str | None = None
@@ -56,8 +66,9 @@ class Config:
     rate_limit: str | None = None
     pause_seconds: tuple[int, int] = (0, 0)
     heartbeat_url: str | None = None
-    web_port: int | None = 8000  # index page (needs `plex`); None to disable
+    web_port: int | None = 8000  # index page (needs a media server); None to disable
     plex: PlexConfig | None = None
+    jellyfin: JellyfinConfig | None = None  # used instead of Plex when set
 
     def find_creator(self, slug: str) -> CreatorConfig:
         for c in self.creators:
@@ -76,6 +87,11 @@ def _creator(raw: dict) -> CreatorConfig:
 def load_config(path: Path) -> Config:
     raw = yaml.safe_load(path.read_text()) or {}
     plex = raw.pop("plex", None)
+    jellyfin = raw.pop("jellyfin", None)
+    if jellyfin and "library_id" in jellyfin:
+        jellyfin["library_ids"] = [jellyfin.pop("library_id")]
+    if jellyfin and isinstance(jellyfin.get("library_ids"), str):
+        jellyfin["library_ids"] = [jellyfin["library_ids"]]
     creators = [_creator(c) for c in raw.pop("creators", [])]
     if not creators:
         raise SystemExit("Config needs at least one entry under 'creators'")
@@ -89,4 +105,5 @@ def load_config(path: Path) -> Config:
         pause_seconds=tuple(pause) if pause else (0, 0),
         creators=creators,
         plex=PlexConfig(**plex) if plex and plex.get("token") else None,
+        jellyfin=JellyfinConfig(**jellyfin) if jellyfin and jellyfin.get("api_key") else None,
     )
