@@ -16,7 +16,7 @@ from pathlib import Path
 from yt_dlp import YoutubeDL
 from yt_dlp.networking import Request
 
-from . import plex
+from . import media
 from .config import Config, CreatorConfig
 from .harvest import Harvester
 from .state import State
@@ -74,7 +74,7 @@ def check_likes(cfg: Config, creator: CreatorConfig, only_watched: bool = False,
     store = LikeStore(cfg, creator)
     known = store.load()
     by_file = post_files(h.state.posts)
-    watched = {by_file[e.path] for e in plex.episodes(cfg) if e.watched and e.path in by_file}
+    watched = {by_file[e.path] for e in media.episodes(cfg) if e.watched and e.path in by_file}
 
     urgent = [pid for pid in watched if not known.get(pid, {}).get("liked")]
     stale_before = time.time() - RECHECK_AFTER_DAYS * 86400
@@ -100,23 +100,23 @@ def check_likes(cfg: Config, creator: CreatorConfig, only_watched: bool = False,
 
 
 def mark_liked_watched(cfg: Config, creator: CreatorConfig) -> int:
-    """Mark episodes as watched in Plex when you have liked the post on Patreon.
+    """Mark episodes as watched on the media server when you have liked the post on Patreon.
 
     A like means you have seen it (often before it was downloaded). Each episode is marked
-    at most once, so setting one back to unwatched in Plex sticks.
+    at most once, so setting one back to unwatched there sticks.
     """
     by_file = post_files(State(cfg.data_dir / creator.creator / "state.json").posts)
     store = LikeStore(cfg, creator)
     known = store.load()
     marked = 0
-    for ep in plex.episodes(cfg):
+    for ep in media.episodes(cfg):
         pid = by_file.get(ep.path)
         if not pid or ep.watched:
             continue
         info = known.get(pid, {})
         if info.get("liked") and not info.get("marked_watched"):
-            plex.mark_watched(cfg, ep.rating_key)
+            media.mark_watched(cfg, ep.item_id)
             store.update(pid, marked_watched=int(time.time()))
-            log.info("Marked as watched in Plex (liked on Patreon): %s %s", ep.show, ep.title)
+            log.info("Marked as watched in %s (liked on Patreon): %s %s", media.name(cfg), ep.show, ep.title)
             marked += 1
     return marked

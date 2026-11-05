@@ -16,7 +16,7 @@ from pathlib import Path
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
-from . import plex
+from . import media
 from .config import Config, CreatorConfig
 from .state import State
 
@@ -157,8 +157,8 @@ def collect(cfg: Config, creator: CreatorConfig) -> list[tuple[str, str, float]]
     """(kind, YYYY-MM-DD, seconds) for every Patreon post in the library and every listed
     YouTube video with a known date. A Patreon post in parts counts once, with all its parts."""
     items: list[tuple[str, str, float]] = []
-    if cfg.plex:
-        episodes = {ep.path: ep for ep in plex.episodes(cfg)}
+    if media.enabled(cfg):
+        episodes = {ep.path: ep for ep in media.episodes(cfg)}
         for post in State(cfg.data_dir / creator.creator / "state.json").posts.values():
             if post.get("status") != "done":
                 continue

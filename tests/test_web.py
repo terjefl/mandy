@@ -1,6 +1,7 @@
 import re
 from pathlib import Path
 
+from mandy.episode import Episode
 from mandy import plex, web
 from mandy.config import Config, CreatorConfig, PlexConfig
 
@@ -13,7 +14,7 @@ def test_chronological_page_is_newest_first_across_shows(tmp_path, monkeypatch):
            ("Mandy", 2023, 30, "Big Fat Quiz", "2023-04-04", False), ("Taskmaster", 21, 1, "Cube", "2026-10-01", True)]
     files = [Path(tmp_path / f"{i}.mp4") for i in range(len(eps))]
     monkeypatch.setattr(plex, "episodes", lambda cfg, section=None, include_other=False: [
-        plex.PlexEpisode(str(10 + i), show, s, e, t, d, w, files[i]) for i, (show, s, e, t, d, w) in enumerate(eps)
+        Episode(str(10 + i), show, s, e, t, d, w, files[i]) for i, (show, s, e, t, d, w) in enumerate(eps)
     ])
     monkeypatch.setattr(plex, "web_link", lambda cfg, key: "http://plex/" + key)
     monkeypatch.setattr(web, "post_files", lambda posts: {f: str(i) for i, f in enumerate(files)})
@@ -38,8 +39,8 @@ def test_youtube_episodes_in_the_creators_library_are_listed_with_a_youtube_link
     patreon_file = tmp_path / "p.mp4"
     yt_file = Path("/Media01/Pinchflat/TV/Mandy Cane Lane - YouTube/Season 2026/s2026e100999 - WALLY [gtitf4ECTzY].mp4")
     monkeypatch.setattr(plex, "episodes", lambda cfg, section=None, include_other=False: [
-        plex.PlexEpisode("1", "Taskmaster", 21, 1, "Cube", "2026-10-01", True, patreon_file),
-        plex.PlexEpisode("2", "Mandy Cane Lane - YouTube", 2026, 100999, "WALLY", "2026-10-09", False, yt_file, local=False),
+        Episode("1", "Taskmaster", 21, 1, "Cube", "2026-10-01", True, patreon_file),
+        Episode("2", "Mandy Cane Lane - YouTube", 2026, 100999, "WALLY", "2026-10-09", False, yt_file, local=False),
     ][: 2 if include_other else 1])
     monkeypatch.setattr(plex, "web_link", lambda cfg, key: "http://plex/" + key)
     monkeypatch.setattr(web, "post_files", lambda posts: {patreon_file: "9"})

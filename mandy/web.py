@@ -1,5 +1,5 @@
-"""Index page for a creator: every episode, from Patreon and from other sources in the same Plex
-library (e.g. YouTube), with links, Plex watched status and Patreon likes, plus the Patreon posts
+"""Index page for a creator: every episode, from Patreon and from other sources in the same
+library on the media server (e.g. YouTube), with links, watched status and Patreon likes, plus the Patreon posts
 that are missing, in the place they would have had."""
 
 import html
@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import favicon, plex
+from . import favicon, media
 from .config import Config, CreatorConfig
 from .harvest import MAX_ATTEMPTS, Harvester
 from .likes import LikeStore, check_likes, post_files
@@ -41,14 +41,15 @@ class Row:
     watched: bool
     liked: bool | None  # None = not checked yet
     patreon_url: str
-    plex_url: str
-    rating_key: str
+    media_url: str  # the episode on the media server
+    item_id: str  # the media server's id for it
     missing: str | None = None  # why a post has no episode: shown instead of watched/liked
     missing_detail: str = ""
     source: str = "patreon"  # or "youtube" / "other": an episode another tool put in the library
     youtube_url: str = ""
     duration: float = 0.0  # seconds
     path: Path | None = None  # the file in the library, for its measured loudness
+    media_name: str = ""  # "Plex" or "Jellyfin", for the link and the watched button
 
     @property
     def code(self) -> str:
@@ -64,7 +65,7 @@ _PINCHFLAT_DATE = re.compile(r"^s(\d{4})e(\d{2})(\d{2})\d{2}\b")
 
 
 def _date_from_name(name: str) -> str:
-    """The date in a Pinchflat file name, for a video Plex has no date for (yet)."""
+    """The date in a Pinchflat file name, for a video the media server has no date for (yet)."""
     m = _PINCHFLAT_DATE.match(name)
     if not m or not (1 <= int(m[2]) <= 12 and 1 <= int(m[3]) <= 31):
         return ""
@@ -80,7 +81,7 @@ class Index:
     def rows(self) -> list[Row]:
         if self._cache and time.time() - self._cache[0] < CACHE_SECONDS:
             return self._cache[1]
-        episodes = plex.episodes(self.cfg, include_other=True)
+        episodes = media.episodes(self.cfg, include_other=True)
         rows: list[Row] = []
         # The rest of the library (YouTube) is Mandy's; with more creators it couldn't be told apart
         alone = len(self.cfg.creators) == 1
@@ -108,17 +109,18 @@ class Index:
                         watched=ep.watched,
                         liked=likes[post_id]["liked"] if post_id in likes else None,
                         patreon_url=f"https://www.patreon.com/posts/{post_id}",
-                        plex_url=plex.web_link(self.cfg, ep.rating_key),
-                        rating_key=ep.rating_key,
+                        media_url=media.web_link(self.cfg, ep.item_id),
+                        item_id=ep.item_id,
                         duration=ep.duration,
                         path=ep.path,
+                        media_name=media.name(self.cfg),
                     )
                 )
             rows.extend(_missing_rows(self.cfg, creator, state))
         self._cache = (time.time(), rows)
         return rows
 
-    def _other_row(self, creator: str, ep: plex.PlexEpisode) -> Row:
+    def _other_row(self, creator: str, ep: media.Episode) -> Row:
         youtube = _YOUTUBE_ID.search(ep.path.name)
         return Row(
             creator=creator,
@@ -130,12 +132,13 @@ class Index:
             watched=ep.watched,
             liked=None,
             patreon_url="",
-            plex_url=plex.web_link(self.cfg, ep.rating_key),
-            rating_key=ep.rating_key,
+            media_url=media.web_link(self.cfg, ep.item_id),
+            item_id=ep.item_id,
             source="youtube" if youtube else "other",
             youtube_url=f"https://www.youtube.com/watch?v={youtube.group(1)}" if youtube else "",
             duration=ep.duration,
             path=ep.path,
+            media_name=media.name(self.cfg),
         )
 
     def refresh_likes(self) -> bool:
@@ -157,11 +160,11 @@ class Index:
         return True
 
     def set_watched(self, keys: list[str], watched: bool) -> int:
-        """Mark episodes (Plex rating keys) as watched/unwatched; only keys listed on the page."""
-        allowed = {r.rating_key for r in self.rows()}
+        """Mark episodes (media server ids) as watched/unwatched; only keys listed on the page."""
+        allowed = {r.item_id for r in self.rows()}
         keys = [k for k in keys if k in allowed]
         for key in keys:
-            (plex.mark_watched if watched else plex.mark_unwatched)(self.cfg, key)
+            (media.mark_watched if watched else media.mark_unwatched)(self.cfg, key)
         self._cache = None
         return len(keys)
 
@@ -205,8 +208,8 @@ def _missing_rows(cfg: Config, creator: CreatorConfig, state: State) -> list[Row
                 watched=False,
                 liked=None,
                 patreon_url=f"https://www.patreon.com/posts/{post_id}",
-                plex_url="",
-                rating_key="",
+                media_url="",
+                item_id="",
                 missing=reason,
                 missing_detail=_short_error(post.get("error", "")),
             )
@@ -234,8 +237,8 @@ def _badge(value: bool | None, yes: str, no: str) -> str:
 def _watched_button(r: Row) -> str:
     label, short, cls = ("Sett", "✓", "yes") if r.watched else ("Ikke sett", "✗", "no")
     return (
-        f'<button class="b {cls} wbtn" data-key="{_e(r.rating_key)}" data-watched="{int(r.watched)}" '
-        f'title="Klikk for å merke som {"ikke sett" if r.watched else "sett"} i Plex">'
+        f'<button class="b {cls} wbtn" data-key="{_e(r.item_id)}" data-watched="{int(r.watched)}" '
+        f'title="Klikk for å merke som {"ikke sett" if r.watched else "sett"} i {_e(r.media_name)}">'
         f'<span class="long">{label}</span><span class="short">{short}</span></button>'
     )
 
@@ -259,9 +262,9 @@ def _row_html(r: Row, show_name: bool = False) -> str:
         )
     else:
         liked = ""
-    links = [(r.patreon_url, "Patreon"), (r.youtube_url, "YouTube"), (r.plex_url, "Plex")]
+    links = [(r.patreon_url, "Patreon"), (r.youtube_url, "YouTube"), (r.media_url, r.media_name)]
     return (
-        f'<tr class="{cls}" data-key="{_e(r.rating_key)}"><td class="code">{_e(r.code)}</td>'
+        f'<tr class="{cls}" data-key="{_e(r.item_id)}"><td class="code">{_e(r.code)}</td>'
         f"<td>{show}{_e(r.title)}</td>"
         f'<td class="date">{_e(r.aired)}</td>'
         f"<td>{_watched_button(r)}</td>"
@@ -312,7 +315,7 @@ def render(index: Index) -> str:
         gone = len(both) - len(eps)
         seen = sum(r.watched for r in eps)
         body = "".join(_row_html(r) for r in both)
-        unseen = [r.rating_key for r in eps if not r.watched]
+        unseen = [r.item_id for r in eps if not r.watched]
         all_btn = (
             f'<button class="allbtn" data-keys="{_e(",".join(unseen))}">Merk alle som sett</button>' if unseen else ""
         )
@@ -332,7 +335,7 @@ _MONTHS = "januar februar mars april mai juni juli august september oktober nove
 def render_chrono(index: Index) -> str:
     """Every episode across all shows, newest first, grouped by month."""
     rows = [r for r in index.rows() if not r.missing]
-    newest_first = sorted(rows, key=lambda r: (r.aired, int(r.rating_key or 0)), reverse=True)
+    newest_first = sorted(rows, key=lambda r: (r.aired, r.season, r.episode), reverse=True)
     months: dict[str, list[Row]] = {}
     for r in newest_first:
         months.setdefault(r.aired[:7], []).append(r)
@@ -389,6 +392,7 @@ def _page(index: Index, page: str, content: str, rows: list[Row], missing: list[
         refresh=refresh,
         content=content,
         updated=time.strftime("%d.%m.%Y %H:%M"),
+        server=_e(media.name(index.cfg)),
     )
 
 
@@ -467,7 +471,7 @@ footer {{ color:var(--muted); font-size:13px; margin-top:24px }}
 {filters}
 {refresh}</div></header>
 {content}
-<footer>Oppdatert {updated}. «Sett» kommer fra Plex. Likerklikk på Patreon sjekkes hver time (sette episoder først), eller med knappen over; YouTube viser ikke likerklikk til andre, så der lenker siden til videoen i stedet. Poster som mangler står i kursiv der episoden skulle vært; hold over merket for å se feilen.</footer>
+<footer>Oppdatert {updated}. «Sett» kommer fra {server}. Likerklikk på Patreon sjekkes hver time (sette episoder først), eller med knappen over; YouTube viser ikke likerklikk til andre, så der lenker siden til videoen i stedet. Poster som mangler står i kursiv der episoden skulle vært; hold over merket for å se feilen.</footer>
 </main>
 <script>
 const page = document.body.dataset.page;
@@ -503,7 +507,7 @@ document.addEventListener('click', async e => {{
     }} else {{
       await setWatched(b.dataset.keys.split(','), true); location.reload(); return;
     }}
-  }} catch (err) {{ alert('Klarte ikke å oppdatere Plex: ' + err.message); }}
+  }} catch (err) {{ alert('Klarte ikke å oppdatere {server}: ' + err.message); }}
   b.disabled = false;
 }});
 for (const name of ['f', 'src']) {{

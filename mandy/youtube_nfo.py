@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-from . import plex
+from . import media
 from .config import Config, CreatorConfig
 
 log = logging.getLogger(__name__)
@@ -58,9 +58,9 @@ def fix_youtube_nfos(cfg: Config, creator: CreatorConfig) -> list[Path]:
             log.warning("Could not fix %s: %s", nfo.name, e)
     if fixed:
         log.info("Set the date in %d YouTube .nfo file(s): %s", len(fixed), ", ".join(f.stem for f in fixed))
-    if fixed and cfg.plex:
+    if fixed and media.enabled(cfg):
         stems = {f.stem for f in fixed}
-        for ep in plex.episodes(cfg, include_other=True):
+        for ep in media.episodes(cfg, include_other=True):
             if not ep.local and ep.path.stem in stems:
-                plex.refresh_metadata(cfg, ep.rating_key)
+                media.refresh_metadata(cfg, ep.item_id)
     return fixed
