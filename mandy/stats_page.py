@@ -215,7 +215,7 @@ footer {{ color:var(--muted); font-size:13px; margin-top:24px }}
 </style></head>
 <body><main>
 <h1>{name}</h1>
-<div class="sub">Hours of video, on Patreon and YouTube · <a href="videos">All videos</a></div>
+<div class="sub">Hours of video, on Patreon and YouTube · <a href="videos">All videos</a> · <a href="levels">Audio levels</a></div>
 <div class="tiles">{tiles}</div>
 {loudness}
 {chart}
