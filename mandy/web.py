@@ -19,6 +19,7 @@ from .config import Config, CreatorConfig
 from .harvest import MAX_ATTEMPTS, Harvester
 from .likes import LikeStore, check_likes, post_files
 from .state import State
+from .levels_page import render_levels
 from .public_page import render_videos
 from .stats_page import render_stats
 
@@ -563,6 +564,12 @@ def serve(cfg: Config, port: int) -> ThreadingHTTPServer:
                     self._send(200, render_videos(index.rows(), cfg, cfg.creators[0]))
                 except Exception as e:
                     log.exception("Rendering the video list failed")
+                    self._send(500, f"<p>Could not make the page: {_e(e)}</p>")
+            elif path == "/levels":
+                try:
+                    self._send(200, render_levels(index.rows(), cfg, cfg.creators[0]))
+                except Exception as e:
+                    log.exception("Rendering audio levels failed")
                     self._send(500, f"<p>Could not make the page: {_e(e)}</p>")
             elif creator:
                 try:
