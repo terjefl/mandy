@@ -21,14 +21,15 @@ pause_seconds: [60, 180]
 #   section_id: 18                   # the "Mandy" library (also holds her YouTube from Pinchflat)
 #   library_path: /Media01/Mandy     # library_dir as Plex sees it
 
-# Jellyfin, instead of Plex: when this section has an api_key, it is used and `plex` is ignored.
+# Jellyfin, instead of Plex. With both sections, Plex is used until media_server says jellyfin.
+# media_server: jellyfin
 # jellyfin:
 #   url: http://10.11.12.16:8096           # for the API, from inside the container
 #   web_url: https://jellyfin.flagan.net   # for links in the browser (defaults to url)
-#   api_key: XXXXXXXX                      # Dashboard > API Keys
+#   api_key_file: /config/jellyfin.key     # or api_key: XXXXXXXX (Dashboard > API Keys)
 #   user_id: XXXXXXXX                      # whose watched status the index page shows and sets
 #   library_id: XXXXXXXX                   # or library_ids: [..] if Patreon and YouTube are apart
-#   library_path: /media/Mandy             # library_dir as Jellyfin sees it
+#   library_path: /Media01/Mandy           # library_dir as Jellyfin sees it
 
 # Index page (mandy.flagan.net) with every video, watched status and Patreon likes (needs `jellyfin` or `plex`).
 # No login of its own: put it behind an authenticating proxy.

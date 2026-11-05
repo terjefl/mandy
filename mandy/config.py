@@ -16,10 +16,10 @@ class PlexConfig:
 @dataclass
 class JellyfinConfig:
     url: str  # for the API, e.g. http://10.11.12.16:8096
-    api_key: str
+    api_key: str  # or api_key_file in the YAML: a file holding the key, kept out of the config
     user_id: str  # whose watched status the index page shows and sets
     library_ids: list[str]  # the libraries with the creator's shows (Patreon and YouTube)
-    library_path: str = "/media/Mandy"  # library_dir as Jellyfin sees it
+    library_path: str = "/Media01/Mandy"  # library_dir as Jellyfin sees it
     web_url: str | None = None  # for links in the browser, e.g. https://jellyfin.flagan.net; defaults to url
 
 
@@ -68,7 +68,10 @@ class Config:
     heartbeat_url: str | None = None
     web_port: int | None = 8000  # index page (needs a media server); None to disable
     plex: PlexConfig | None = None
-    jellyfin: JellyfinConfig | None = None  # used instead of Plex when set
+    jellyfin: JellyfinConfig | None = None
+    # "plex" or "jellyfin": which one to use when both are configured (Plex unless set);
+    # with only one configured, that one
+    media_server: str | None = None
 
     def find_creator(self, slug: str) -> CreatorConfig:
         for c in self.creators:
@@ -92,6 +95,10 @@ def load_config(path: Path) -> Config:
         jellyfin["library_ids"] = [jellyfin.pop("library_id")]
     if jellyfin and isinstance(jellyfin.get("library_ids"), str):
         jellyfin["library_ids"] = [jellyfin["library_ids"]]
+    if jellyfin and jellyfin.get("api_key_file"):
+        jellyfin["api_key"] = Path(jellyfin.pop("api_key_file")).read_text().strip()
+    if raw.get("media_server") not in (None, "plex", "jellyfin"):
+        raise SystemExit(f"media_server must be plex or jellyfin, not {raw['media_server']!r}")
     creators = [_creator(c) for c in raw.pop("creators", [])]
     if not creators:
         raise SystemExit("Config needs at least one entry under 'creators'")

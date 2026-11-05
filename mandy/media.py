@@ -1,6 +1,6 @@
-"""The media server the library lives in: Jellyfin when the config has a `jellyfin` section,
-otherwise Plex. Callers use these functions and never the server modules directly, so moving
-from one server to the other is a config change."""
+"""The media server the library lives in: the one `media_server` names, or the only one
+configured (Plex when both are and nothing is named). Callers use these functions and never
+the server modules directly, so moving from one server to the other is a config change."""
 
 from pathlib import Path
 from types import ModuleType
@@ -13,16 +13,23 @@ __all__ = ["Episode", "enabled", "name", "episodes", "web_link", "mark_watched",
            "refresh_metadata", "scan", "merge_stale_shows"]
 
 
+def _pick(cfg: Config) -> ModuleType | None:
+    if cfg.media_server == "jellyfin":
+        return jellyfin if cfg.jellyfin else None
+    if cfg.media_server == "plex":
+        return plex if cfg.plex else None
+    return plex if cfg.plex else jellyfin if cfg.jellyfin else None
+
+
 def _server(cfg: Config) -> ModuleType:
-    if cfg.jellyfin:
-        return jellyfin
-    if cfg.plex:
-        return plex
-    raise RuntimeError("No media server in the config (`jellyfin` or `plex`)")
+    server = _pick(cfg)
+    if server is None:
+        raise RuntimeError("No media server in the config: a `jellyfin` or `plex` section, as `media_server` names")
+    return server
 
 
 def enabled(cfg: Config) -> bool:
-    return bool(cfg.jellyfin or cfg.plex)
+    return _pick(cfg) is not None
 
 
 def name(cfg: Config) -> str:

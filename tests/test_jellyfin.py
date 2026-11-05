@@ -3,6 +3,8 @@ import json
 import urllib.error
 from pathlib import Path
 
+import pytest
+
 from mandy import jellyfin, media, plex, web
 from mandy.config import Config, CreatorConfig, JellyfinConfig, PlexConfig, load_config
 
@@ -17,7 +19,7 @@ def _cfg(tmp_path, **jf):
     return Config(library_dir=tmp_path / "lib", cookies_file=tmp_path / "c", data_dir=tmp_path / "data",
                   creators=[CreatorConfig(creator="M", creator_name="Mandy")],
                   plex=PlexConfig(url="http://plex", token="t", section_id=1),
-                  jellyfin=JellyfinConfig(**jf))
+                  jellyfin=JellyfinConfig(**jf), media_server="jellyfin")
 
 
 def _item(id, show, s, e, title, path, played=False, premiere="2024-03-01T00:00:00.0000000Z", ticks=6_000_000_000, **kw):
@@ -107,17 +109,24 @@ def test_link_refresh_and_scan(tmp_path, monkeypatch):
     assert media.name(cfg) == "Jellyfin"
 
 
-def test_config_picks_jellyfin_over_plex(tmp_path):
+def test_config_keeps_plex_until_told_and_reads_the_key_file(tmp_path):
+    (tmp_path / "jellyfin.key").write_text("k3y\n")
     path = tmp_path / "config.yaml"
-    path.write_text(
-        "library_dir: /library\ncookies_file: /c\ndata_dir: /data\ncreators: [{creator: M}]\n"
-        "plex: {url: http://plex, token: t, section_id: 1}\n"
-        f"jellyfin: {{url: http://jf, api_key: k, user_id: u, library_id: {LIB}}}\n"
-    )
+    base = ("library_dir: /library\ncookies_file: /c\ndata_dir: /data\ncreators: [{creator: M}]\n"
+            f"jellyfin: {{url: http://jf, api_key_file: {tmp_path / 'jellyfin.key'}, user_id: u, library_id: {LIB}}}\n")
+    plex_section = "plex: {url: http://plex, token: t, section_id: 1}\n"
+    path.write_text(base + plex_section)
     cfg = load_config(path)
-    assert cfg.jellyfin.library_ids == [LIB] and media.name(cfg) == "Jellyfin"
-    path.write_text(path.read_text().replace("api_key: k, ", ""))  # without a key it stays off
-    assert load_config(path).jellyfin is None and media.name(load_config(path)) == "Plex"
+    assert cfg.jellyfin.api_key == "k3y" and cfg.jellyfin.library_ids == [LIB]
+    assert cfg.jellyfin.library_path == "/Media01/Mandy"
+    assert media.name(cfg) == "Plex"  # both configured: Plex until media_server says otherwise
+    path.write_text(base + plex_section + "media_server: jellyfin\n")
+    assert media.name(load_config(path)) == "Jellyfin"
+    path.write_text(base)
+    assert media.name(load_config(path)) == "Jellyfin"  # the only one
+    path.write_text(base + "media_server: emby\n")
+    with pytest.raises(SystemExit):
+        load_config(path)
 
 
 def test_index_with_jellyfin_ids_links_and_sorts(tmp_path, monkeypatch):

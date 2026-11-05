@@ -124,7 +124,9 @@ def mark_unwatched(cfg: Config, item_id: str) -> None:
 
 
 def refresh_metadata(cfg: Config, item_id: str) -> None:
-    """Have Jellyfin re-read an item's metadata (with the Nfo reader: its .nfo sidecar)."""
+    """Have Jellyfin re-read an item's metadata (with the Nfo reader: its .nfo sidecar). A full
+    refresh, since a default one skips an .nfo that changed without its video; with online
+    fetchers off and metadata saving off, the .nfo is all it reads and nothing is written back."""
     _request(cfg, "POST", f"/Items/{item_id}/Refresh", {
         "metadataRefreshMode": "FullRefresh", "imageRefreshMode": "Default",
         "replaceAllMetadata": "true", "replaceAllImages": "false",

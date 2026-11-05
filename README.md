@@ -59,7 +59,7 @@ The agent reads the `.nfo` sidecars, so titles, descriptions, dates, posters and
 
 ## Jellyfin
 
-Instead of Plex, the tool can use Jellyfin for the same things: the episode list, watched status, links, library scans and re-reading an episode's `.nfo`. A `jellyfin` section with an `api_key` in the config switches it over; without one, `plex` is used. Both can stay in the config, so going back is a matter of removing the `jellyfin` section.
+Instead of Plex, the tool can use Jellyfin for the same things: the episode list, watched status, links, library scans and re-reading an episode's `.nfo`. With only a `jellyfin` section in the config, Jellyfin is used. With both, Plex stays in use until `media_server: jellyfin` is set, so the section can be put in place first and going back is one line. The API key can sit in a file of its own (`api_key_file`) instead of in the config. Jellyfin sends its API key in the `Authorization: MediaBrowser Token="…"` header; newer versions answer the old `X-Emby-Token` with 401.
 
 The library needs the **Nfo** metadata reader on (and online metadata fetchers off), so the shows, titles and dates come from the sidecars as they do in Plex. Watched status in Jellyfin belongs to a user: `user_id` is the one whose status the index page shows and sets. A video in parts is one item in Jellyfin; its parts are listed with the item's id, as Plex does. Jellyfin builds shows from the folders, so the Plex-only clean-up after `refile` (merging a show left behind) is not needed there.
 
