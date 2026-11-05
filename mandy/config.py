@@ -11,6 +11,9 @@ class PlexConfig:
     token: str
     section_id: int
     library_path: str = "/Media01/Mandy"  # library_dir as Plex sees it
+    # Other folders in the library as Plex sees them -> as this container sees them, e.g.
+    # {"/Media01/Pinchflat/TV/Mandy Cane Lane - YouTube": "/youtube"}, so their files can be found
+    path_map: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -21,6 +24,9 @@ class JellyfinConfig:
     library_ids: list[str]  # the libraries with the creator's shows (Patreon and YouTube)
     library_path: str = "/Media01/Mandy"  # library_dir as Jellyfin sees it
     web_url: str | None = None  # for links in the browser, e.g. https://jellyfin.flagan.net; defaults to url
+    # Other folders in the library as Jellyfin sees them -> as this container sees them, e.g.
+    # {"/Media01/YouTube/Mandy": "/youtube"}, so their files can be found
+    path_map: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass

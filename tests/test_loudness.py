@@ -119,3 +119,66 @@ def test_public_videos_page_shows_a_lufs_badge(tmp_path):
                     "https://www.patreon.com/posts/1", "p", "1", duration=300, path=f)]
     html = public_page.render_videos(rows, cfg, cfg.creators[0])
     assert '"lufs":-27' in html or '"lufs": -27' in html
+
+
+def test_measure_missing_takes_youtube_videos_too(tmp_path, monkeypatch):
+    cfg = _cfg(tmp_path)
+    yt = tmp_path / "youtube" / "Mandy Cane Lane - YouTube" / "Season 2023"
+    yt.mkdir(parents=True)
+    (yt / "s2023e090999 - DRUM [Rnt1nNH_lCo].mp4").write_bytes(b"v")
+    (yt / "s2023e090999 - DRUM [Rnt1nNH_lCo].nfo").write_text("<episodedetails/>")
+    (yt / ".s2023e091000 - partial.mp4").write_bytes(b"p")
+    cfg.creators[0].youtube_dir = str(tmp_path / "youtube")
+    monkeypatch.setattr(loudness, "measure_file", lambda f: {"lufs": -21.0, "tp": -1.0, "lra": 4.0})
+    r = loudness.measure_missing(cfg, cfg.creators[0])
+    assert r["measured"] == 1 and r["total"] == 1  # the video, not its .nfo or a hidden partial
+    assert loudness.LoudnessStore(cfg, cfg.creators[0]).get(yt / "s2023e090999 - DRUM [Rnt1nNH_lCo].mp4")["lufs"] == -21.0
+
+
+def test_two_stores_saving_keep_each_others_measurements(tmp_path):
+    cfg = _cfg(tmp_path)
+    cfg.library_dir.mkdir(parents=True)
+    a, b = cfg.library_dir / "a.mp4", cfg.library_dir / "b.mp4"
+    a.write_bytes(b"a")
+    b.write_bytes(b"b")
+    backfill, run = loudness.LoudnessStore(cfg, cfg.creators[0]), loudness.LoudnessStore(cfg, cfg.creators[0])
+    backfill.all(), run.all()  # both loaded before either saved
+    backfill.set(a, {"lufs": -30.0, "tp": -1, "lra": 5})
+    backfill.save()
+    run.set(b, {"lufs": -20.0, "tp": -1, "lra": 5})
+    run.save()
+    fresh = loudness.LoudnessStore(cfg, cfg.creators[0])
+    assert fresh.get(a)["lufs"] == -30.0 and fresh.get(b)["lufs"] == -20.0
+    assert not list(cfg.data_dir.rglob("*.tmp"))
+
+
+def test_youtube_rows_get_their_level_on_the_public_pages(tmp_path, monkeypatch):
+    from mandy import jellyfin, levels_page, media
+    from mandy.config import JellyfinConfig
+    from mandy.episode import Episode
+
+    cfg = _cfg(tmp_path)
+    cfg.plex = None
+    cfg.jellyfin = JellyfinConfig(url="http://jf", api_key="k", user_id="u", library_ids=["l"],
+                                  path_map={"/Media01/YouTube/Mandy": str(tmp_path / "youtube")})
+    rel = "Mandy Cane Lane - YouTube/Season 2023/s2023e090999 - DRUM [Rnt1nNH_lCo].mp4"
+    here = tmp_path / "youtube" / rel
+    here.parent.mkdir(parents=True)
+    here.write_bytes(b"v")
+    store = loudness.LoudnessStore(cfg, cfg.creators[0])
+    store.set(here, {"lufs": -33.0, "tp": -9.5, "lra": 4})
+    store.save()
+    monkeypatch.setattr(jellyfin, "episodes", lambda cfg, include_other=False: [
+        Episode("g1", "Mandy Cane Lane - YouTube", 2023, 90999, "DRUM", "2023-05-01", True,
+                Path("/Media01/YouTube/Mandy/" + rel), local=False)] if include_other else [])
+    monkeypatch.setattr(jellyfin, "web_link", lambda cfg, key: "https://jf/" + key)
+    rows = web.Index(cfg).rows()
+    assert rows[0].path == here  # the server's path, mapped to this container's
+    assert media.local_path(cfg, Path("/elsewhere/x.mp4")) == Path("/elsewhere/x.mp4")
+
+    html = levels_page.render_levels(rows, cfg, cfg.creators[0])
+    assert "−33.0" in html and ">DRUM<" in html
+    monkeypatch.setattr(public_page, "load_youtube", lambda cfg, creator: {
+        "listed": ["Rnt1nNH_lCo"], "videos": {"Rnt1nNH_lCo": {"kind": "video", "date": "2023-05-01", "duration": 60}}})
+    yt = [e for e in public_page.items(rows, cfg, cfg.creators[0]) if e["s"] == "youtube"]
+    assert yt[0]["lufs"] == -33.0
