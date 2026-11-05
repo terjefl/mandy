@@ -57,6 +57,14 @@ def run_once(cfg: Config) -> bool:
                 mark_liked_watched(cfg, creator)
             except Exception as e:  # like status is a nicety; never fail the run over it
                 log.warning("Checking like status failed: %s", e)
+        if result.downloaded:
+            try:
+                from .loudness import measure_files
+
+                files = [Path(f) for pid in result.downloaded for f in harvester.state.posts.get(pid, {}).get("files", [])]
+                measure_files(cfg, creator, files, workers=2)
+            except Exception as e:  # loudness is a nicety; never fail the run over it
+                log.warning("Measuring loudness failed: %s", e)
     if downloaded:
         refresh_plex(cfg)
     msg = f"{downloaded} downloaded, {failed} failed, {pending} pending"
@@ -90,6 +98,10 @@ def main() -> None:
     p_refile.add_argument("--dry-run", action="store_true", help="only show what would move")
     p_yt = sub.add_parser("youtube-stats", help="look up the creators' YouTube videos for the statistics page")
     p_yt.add_argument("--all", action="store_true", help="look up every new video now, not 300 at a time")
+    p_lv = sub.add_parser("levels", help="measure the audio loudness of downloaded videos, for the public pages")
+    p_lv.add_argument("--limit", type=int, help="measure at most this many files")
+    p_lv.add_argument("--workers", type=int, default=4, help="how many files to measure at once")
+    p_lv.add_argument("--all", action="store_true", help="re-measure files that were already measured")
     sub.add_parser("run", help="download new posts once")
     sub.add_parser("loop", help="download new posts every interval_minutes")
     args = parser.parse_args()
@@ -172,6 +184,13 @@ def main() -> None:
             if creator.youtube_url:
                 left = refresh_youtube(cfg, creator, max_new=None if args.all else 300)
                 print(f"{creator.creator}: YouTube list updated, {left} video(s) left to look up")
+    elif args.command == "levels":
+        from .loudness import measure_missing
+
+        for creator in cfg.creators:
+            r = measure_missing(cfg, creator, limit=args.limit, workers=args.workers, remeasure=args.all)
+            print(f"{creator.creator}: {r['measured']} measured, {r['failed']} failed, "
+                  f"{r['skipped']} already done, {r['total']} file(s)")
     elif args.command == "run":
         raise SystemExit(0 if run_once(cfg) else 1)
     elif args.command == "loop":

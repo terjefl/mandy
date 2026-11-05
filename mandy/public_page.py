@@ -9,9 +9,11 @@ import html
 import json
 import re
 import time
+from pathlib import Path
 
 from . import favicon
 from .config import Config, CreatorConfig
+from .loudness import LoudnessStore
 from .stats import load_youtube
 
 YOUTUBE_KINDS = {"video": "YouTube", "live": "YouTube livestreams", "short": "YouTube Shorts"}
@@ -23,20 +25,35 @@ def _e(text) -> str:
 
 def items(rows: list, cfg: Config, creator: CreatorConfig) -> list[dict]:
     """One entry per Patreon post (parts of a post merged) and per YouTube video on the channel."""
+    store = LoudnessStore(cfg, creator)
     posts: dict[str, dict] = {}
+    weights: dict[str, list[float]] = {}  # patreon_url -> [sum(lufs*duration), sum(duration)]
     for r in rows:
         if r.source != "patreon":
             continue
+        lufs = None
+        if r.path is not None:
+            info = store.get(r.path)
+            if info:
+                lufs = info.get("lufs")
         entry = posts.get(r.patreon_url)
         if entry:
             entry["d"] += r.duration
-            continue
-        title = re.sub(r"\s+-\s+pt\d+$", "", r.title)
-        show = r.show.removeprefix(r.creator + " - ") if r.show != r.creator else r.show
-        posts[r.patreon_url] = {
-            "s": "patreon", "show": show, "code": r.code, "t": title, "date": r.aired,
-            "d": r.duration, "url": r.patreon_url,
-        }
+        else:
+            title = re.sub(r"\s+-\s+pt\d+$", "", r.title)
+            show = r.show.removeprefix(r.creator + " - ") if r.show != r.creator else r.show
+            entry = {
+                "s": "patreon", "show": show, "code": r.code, "t": title, "date": r.aired,
+                "d": r.duration, "url": r.patreon_url,
+            }
+            posts[r.patreon_url] = entry
+        if lufs is not None and r.duration > 0:
+            acc = weights.setdefault(r.patreon_url, [0.0, 0.0])
+            acc[0] += lufs * r.duration
+            acc[1] += r.duration
+    for url, entry in posts.items():
+        acc = weights.get(url)
+        entry["lufs"] = round(acc[0] / acc[1], 1) if acc and acc[1] > 0 else None
     out = list(posts.values())
     youtube = load_youtube(cfg, creator)
     listing = youtube.get("listing", {})
@@ -48,7 +65,7 @@ def items(rows: list, cfg: Config, creator: CreatorConfig) -> list[dict]:
         out.append({
             "s": "youtube", "show": YOUTUBE_KINDS.get(kind, "YouTube"), "code": "", "t": video.get("title", ""),
             "date": video.get("date", ""), "d": float(video.get("duration") or 0),
-            "url": f"https://www.youtube.com/watch?v={vid}",
+            "url": f"https://www.youtube.com/watch?v={vid}", "lufs": None,
         })
     return out
 
@@ -92,6 +109,8 @@ td.title {{ overflow-wrap:anywhere }} .code, .date, .dur {{ color:var(--muted); 
 .link a {{ text-decoration:none; font-size:13px; border-radius:6px; padding:2px 8px; white-space:nowrap; color:#fff }}
 .link a.patreon {{ background:var(--patreon) }} .link a.youtube {{ background:var(--video) }}
 .link a:hover {{ filter:brightness(1.1) }}
+.lvl {{ display:inline-block; font-size:12px; font-variant-numeric:tabular-nums; border-radius:6px; padding:1px 7px; white-space:nowrap }}
+.lvl-good {{ color:#1f7a3f; background:#e3f3e8 }} .lvl-ok {{ color:#8a5a00; background:#fbefd5 }} .lvl-low {{ color:#a3262a; background:#fbe3e2 }}
 footer {{ color:var(--muted); font-size:13px; margin-top:24px }}
 @media (max-width:640px) {{ td.date, td.dur {{ display:none }} td {{ padding:6px 4px }} td.code {{ width:56px }} td.link {{ width:80px }} }}
 </style></head>
@@ -129,6 +148,12 @@ function row(it, withShow) {{
   const t = el('td', 'title');
   if (withShow) {{ t.append(el('span', 'show', it.show + ' ')); }}
   t.append(document.createTextNode(it.t));
+  if (it.lufs != null) {{
+    const band = it.lufs >= -18 ? 'good' : it.lufs >= -24 ? 'ok' : 'low';
+    const b = el('span', 'lvl lvl-' + band, Math.round(it.lufs) + ' LUFS');
+    b.title = 'Integrated loudness (EBU R128). YouTube turns it down to \u221214 LUFS and never up.';
+    t.append(' ', b);
+  }}
   tr.append(t, el('td', 'date', it.date), el('td', 'dur', dur(it.d)));
   const l = el('td', 'link'), a = el('a', it.s, it.s === 'patreon' ? 'Patreon' : 'YouTube');
   a.href = it.url; a.target = '_blank'; a.rel = 'noopener'; l.append(a); tr.append(l);

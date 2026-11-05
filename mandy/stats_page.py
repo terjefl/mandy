@@ -10,6 +10,7 @@ import time
 
 from . import favicon
 from .config import Config, CreatorConfig
+from .loudness import summary as loudness_summary
 from .stats import aggregate, collect
 
 MONTHS = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split()
@@ -29,6 +30,21 @@ def hours(seconds: float) -> str:
 def _tile(value: str, label: str, note: str, key: str = "") -> str:
     swatch = f'<span class="key k-{key}"></span>' if key else ""
     return f'<div class="tile"><div class="label">{swatch}{_e(label)}</div><div class="big">{_e(value)}</div><div class="note">{_e(note)}</div></div>'
+
+
+def _loudness_section(s: dict) -> str:
+    tiles = (
+        _tile(f"{s['median']:.0f} LUFS", "Typical level", f"median of {s['count']} videos")
+        + _tile(f"{s['below']} of {s['count']}", "Under \u221224 LUFS", f"{s['pct_below']}% sit low")
+        + _tile(f"{s['min']:.0f} \u2026 {s['max']:.0f}", "Range", "quietest to loudest, LUFS")
+    )
+    return (
+        '<section><h2>Audio levels</h2>'
+        f'<div class="tiles">{tiles}</div>'
+        '<p class="note">Integrated loudness (EBU R128) of the downloaded videos, measured over a few '
+        'minutes of each. YouTube turns loudness down to about \u221214 LUFS and never boosts it, so a '
+        'quiet master plays quietly everywhere.</p></section>'
+    )
 
 
 def _chart(months: dict, first: str) -> str:
@@ -143,9 +159,11 @@ def render_stats(cfg: Config, creator: CreatorConfig) -> str:
             f'<p class="note">Since {since_label}, when the Patreon started. Earlier YouTube years are in the table below.</p></section>'
         )
     month_tables = "".join(_month_table(months, k) for k in ("patreon", "video"))
+    loud = loudness_summary(cfg, creator)
     return PAGE.format(
         name=_e(name),
         tiles="".join(tiles),
+        loudness=_loudness_section(loud) if loud else "",
         chart=chart,
         years=_year_table(data["years"], total),
         months=month_tables,
@@ -199,6 +217,7 @@ footer {{ color:var(--muted); font-size:13px; margin-top:24px }}
 <h1>{name}</h1>
 <div class="sub">Hours of video, on Patreon and YouTube · <a href="videos">All videos</a></div>
 <div class="tiles">{tiles}</div>
+{loudness}
 {chart}
 <section><h2>Year by year</h2><div class="scroll">{years}</div></section>
 <section><h2>Month by month</h2>{months}</section>
