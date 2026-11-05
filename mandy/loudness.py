@@ -16,6 +16,7 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -95,13 +96,17 @@ class LoudnessStore:
         self.path = cfg.data_dir / creator.creator / "loudness.json"
         self.library_dir = cfg.library_dir
         self._data: dict | None = None
+        self._changed: set[str] = set()
+
+    def _read(self) -> dict:
+        try:
+            return json.loads(self.path.read_text())
+        except (FileNotFoundError, ValueError):
+            return {}
 
     def _load(self) -> dict:
         if self._data is None:
-            try:
-                self._data = json.loads(self.path.read_text())
-            except (FileNotFoundError, ValueError):
-                self._data = {}
+            self._data = self._read()
         return self._data
 
     def get(self, file: Path) -> dict | None:
@@ -123,24 +128,47 @@ class LoudnessStore:
             size, mtime = st.st_size, st.st_mtime
         except OSError:
             size, mtime = None, None
-        self._load()[_key(file, self.library_dir)] = {
-            **values, "size": size, "mtime": mtime, "measured_at": int(time.time()),
-        }
+        key = _key(file, self.library_dir)
+        self._load()[key] = {**values, "size": size, "mtime": mtime, "measured_at": int(time.time())}
+        self._changed.add(key)
 
     def save(self) -> None:
+        """Write this store's new measurements over what is on disk now, so a backfill and a
+        regular run measuring at the same time don't drop each other's results."""
+        data = self._load()
+        merged = self._read()
+        merged.update({k: data[k] for k in self._changed})
+        self._data, self._changed = merged, set()
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self._load(), indent=1, sort_keys=True))
+        tmp = self.path.with_name(f"{self.path.stem}.{os.getpid()}.{threading.get_ident()}.tmp")
+        tmp.write_text(json.dumps(merged, indent=1, sort_keys=True))
         os.replace(tmp, self.path)
 
     def all(self) -> dict:
         return self._load()
 
 
+VIDEO_SUFFIXES = {".mp4", ".mkv", ".webm", ".m4v", ".mov"}
+
+
 def done_files(cfg: Config, creator: CreatorConfig) -> list[Path]:
     """Every downloaded file for the creator (status "done" in state.json)."""
     state = State(cfg.data_dir / creator.creator / "state.json")
     return [Path(f) for p in state.posts.values() if p.get("status") == "done" for f in p.get("files", [])]
+
+
+def youtube_files(creator: CreatorConfig) -> list[Path]:
+    """Every video in the creator's youtube_dir (Pinchflat's folder), newest name first."""
+    root = Path(creator.youtube_dir or "")
+    if not creator.youtube_dir or not root.is_dir():
+        return []
+    files = [f for f in root.rglob("*") if f.suffix.lower() in VIDEO_SUFFIXES and not f.name.startswith(".") and f.is_file()]
+    return sorted(files, key=lambda f: f.name, reverse=True)
+
+
+def all_files(cfg: Config, creator: CreatorConfig) -> list[Path]:
+    """The creator's Patreon downloads and YouTube videos."""
+    return done_files(cfg, creator) + youtube_files(creator)
 
 
 def measure_files(cfg: Config, creator: CreatorConfig, files: list[Path], *,
@@ -171,8 +199,9 @@ def measure_files(cfg: Config, creator: CreatorConfig, files: list[Path], *,
 
 def measure_missing(cfg: Config, creator: CreatorConfig, *, limit: int | None = None,
                     workers: int = DEFAULT_WORKERS, remeasure: bool = False) -> dict:
-    """Measure every downloaded file that lacks a current measurement, optionally capped at `limit`."""
-    files = done_files(cfg, creator)
+    """Measure every Patreon and YouTube video that lacks a current measurement, optionally
+    capped at `limit`."""
+    files = all_files(cfg, creator)
     if limit is not None:
         store = LoudnessStore(cfg, creator)
         files = [f for f in files if f.exists() and (remeasure or store.get(f) is None)][:limit]

@@ -28,7 +28,12 @@ def items(rows: list, cfg: Config, creator: CreatorConfig) -> list[dict]:
     store = LoudnessStore(cfg, creator)
     posts: dict[str, dict] = {}
     weights: dict[str, list[float]] = {}  # patreon_url -> [sum(lufs*duration), sum(duration)]
+    youtube_lufs: dict[str, float] = {}  # video id -> LUFS
     for r in rows:
+        if r.source == "youtube" and r.path is not None:
+            info = store.get(r.path)
+            if info and info.get("lufs") is not None:
+                youtube_lufs[r.youtube_url.rsplit("=", 1)[-1]] = info["lufs"]
         if r.source != "patreon":
             continue
         lufs = None
@@ -65,7 +70,7 @@ def items(rows: list, cfg: Config, creator: CreatorConfig) -> list[dict]:
         out.append({
             "s": "youtube", "show": YOUTUBE_KINDS.get(kind, "YouTube"), "code": "", "t": video.get("title", ""),
             "date": video.get("date", ""), "d": float(video.get("duration") or 0),
-            "url": f"https://www.youtube.com/watch?v={vid}", "lufs": None,
+            "url": f"https://www.youtube.com/watch?v={vid}", "lufs": youtube_lufs.get(vid),
         })
     return out
 

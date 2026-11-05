@@ -45,6 +45,7 @@ Commands (`docker exec mandy mandy --config /config/config.yaml <command>`):
 | `refresh-plots [--remove-orphans]` | Fill empty episode descriptions from the posts and clean the rest; optionally delete sidecars left without a video |
 | `refile <post-id>…` | Move downloaded posts to where their title puts them now (after a parsing fix or a new `show_aliases` entry) |
 | `youtube-stats [--all]` | Update the YouTube list for the statistics page |
+| `levels [--limit N] [--workers N] [--all]` | Measure the audio loudness (EBU R128) of the Patreon and YouTube videos not measured yet (`--all`: every one again), for `/levels`, `/videos` and `/statistics`. Each run also measures its own downloads and 10 others |
 | `run` | Download new posts once |
 | `loop` | Default: `run` every `interval_minutes` |
 
