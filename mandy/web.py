@@ -47,6 +47,7 @@ class Row:
     source: str = "patreon"  # or "youtube" / "other": an episode another tool put in the library
     youtube_url: str = ""
     duration: float = 0.0  # seconds
+    path: Path | None = None  # the file in the library, for its measured loudness
 
     @property
     def code(self) -> str:
@@ -109,6 +110,7 @@ class Index:
                         plex_url=plex.web_link(self.cfg, ep.rating_key),
                         rating_key=ep.rating_key,
                         duration=ep.duration,
+                        path=ep.path,
                     )
                 )
             rows.extend(_missing_rows(self.cfg, creator, state))
@@ -132,6 +134,7 @@ class Index:
             source="youtube" if youtube else "other",
             youtube_url=f"https://www.youtube.com/watch?v={youtube.group(1)}" if youtube else "",
             duration=ep.duration,
+            path=ep.path,
         )
 
     def refresh_likes(self) -> bool:
@@ -371,7 +374,7 @@ def _page(index: Index, page: str, content: str, rows: list[Row], missing: list[
         f'<label><input type="radio" name="src" value="{v}"{" checked" if not v else ""}><span>{label}</span></label>'
         for v, label in (("", "Alle kilder"), ("src-pt", "Patreon"), ("src-yt", "YouTube"))
     ) if len(by_source) > 1 else ""
-    views = (("shows", "./", "Per serie"), ("chrono", "kronologisk", "Kronologisk"), ("stats", "statistikk", "Statistikk ↗"), ("videos", "videos", "Offentlig liste ↗"))
+    views = (("shows", "./", "Per serie"), ("chrono", "chronological", "Kronologisk"), ("stats", "statistics", "Statistikk ↗"), ("videos", "videos", "Offentlig liste ↗"))
     nav = "".join(f'<a href="{href}" class="{"on" if key == page else ""}">{label}</a>' for key, href, label in views)
     names = [c.creator_name or c.creator for c in index.cfg.creators]
     return PAGE.format(
@@ -514,8 +517,8 @@ applyFilters();
 
 
 def _stats_creator(cfg: Config, path: str) -> CreatorConfig | None:
-    """/statistikk is Mandy's statistics page."""
-    return cfg.creators[0] if path.split("?", 1)[0].rstrip("/") == "/statistikk" else None
+    """/statistics is Mandy's statistics page."""
+    return cfg.creators[0] if path.split("?", 1)[0].rstrip("/") == "/statistics" else None
 
 
 _stats_cache: dict[str, tuple[float, str]] = {}
@@ -547,9 +550,15 @@ def serve(cfg: Config, port: int) -> ThreadingHTTPServer:
             self.wfile.write(data)
 
         def do_GET(self):
-            page = {"/": render, "/index.html": render, "/kronologisk": render_chrono}.get(self.path)
-            creator = _stats_creator(cfg, self.path)
-            if self.path.split("?", 1)[0].rstrip("/") == "/videos":
+            bare = self.path.split("?", 1)[0]
+            path = bare.rstrip("/") or "/"
+            redirects = {"/kronologisk": "/chronological", "/statistikk": "/statistics"}
+            redirect = redirects.get(bare) or redirects.get(path)
+            page = {"/": render, "/index.html": render, "/chronological": render_chrono}.get(path)
+            creator = _stats_creator(cfg, path)
+            if redirect:
+                self._send(301, "", headers=[("Location", redirect)])
+            elif path == "/videos":
                 try:
                     self._send(200, render_videos(index.rows(), cfg, cfg.creators[0]))
                 except Exception as e:
@@ -567,10 +576,10 @@ def serve(cfg: Config, port: int) -> ThreadingHTTPServer:
                 except Exception as e:
                     log.exception("Rendering index failed")
                     self._send(500, f"<p>Kunne ikke lage siden: {_e(e)}</p>")
-            elif self.path in ICONS:
+            elif path in ICONS:
                 # the pages carry the icon inline; these are for browsers that ask by path
-                self._send(200, *ICONS[self.path], cache="public, max-age=604800")
-            elif self.path == "/health":
+                self._send(200, *ICONS[path], cache="public, max-age=604800")
+            elif path == "/health":
                 self._send(200, "ok", "text/plain")
             else:
                 self._send(404, "Not found", "text/plain")
