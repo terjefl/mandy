@@ -41,6 +41,33 @@ def ffmpeg_path() -> str | None:
     return shutil.which("ffmpeg")
 
 
+def ffprobe_path() -> str | None:
+    return shutil.which("ffprobe")
+
+
+def _duration(path: Path) -> float | None:
+    """The file's length in seconds from ffprobe, or None if it can't be read."""
+    ffprobe = ffprobe_path()
+    if not ffprobe:
+        return None
+    cmd = [ffprobe, "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        value = float((proc.stdout or "").strip())
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    return value if math.isfinite(value) and value > 0 else None
+
+
+def _offset(path: Path, offset: int, window: int) -> int:
+    """Where the window starts: `offset`, pulled earlier so a full window fits before the end
+    (from 0:00 when the file is shorter than offset + window). `offset` if the length is unknown."""
+    duration = _duration(path)
+    if duration is None:
+        return offset
+    return int(max(0, min(offset, duration - window)))
+
+
 def _run(ffmpeg: str, path: Path, offset: int, window: int) -> dict | None:
     cmd = [ffmpeg, "-hide_banner", "-nostats"]
     if offset:
@@ -70,11 +97,13 @@ def _run(ffmpeg: str, path: Path, offset: int, window: int) -> dict | None:
 
 def measure_file(path: Path, offset: int = WINDOW_OFFSET_SECONDS, window: int = WINDOW_SECONDS) -> dict | None:
     """Integrated loudness (LUFS), true peak (dBTP) and loudness range of one file, or None if
-    ffmpeg is missing or the file can't be read. A file shorter than the offset is measured from
-    the start instead."""
+    ffmpeg is missing or the file can't be read. The window starts early enough to fit before the
+    end, so a file shorter than offset + window is measured from the start; if its length can't
+    be read, a file shorter than the offset is measured from the start instead."""
     ffmpeg = ffmpeg_path()
     if not ffmpeg:
         return None
+    offset = _offset(path, offset, window)
     for off in ((offset, 0) if offset else (0,)):
         values = _run(ffmpeg, path, off, window)
         if values:

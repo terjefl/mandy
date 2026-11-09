@@ -16,6 +16,7 @@ def test_measure_file_parses_loudnorm_json(tmp_path, monkeypatch):
     f = tmp_path / "a.mp4"
     f.write_bytes(b"x")
     monkeypatch.setattr(loudness, "ffmpeg_path", lambda: "ffmpeg")
+    monkeypatch.setattr(loudness, "ffprobe_path", lambda: None)
     stderr = 'size=N/A time=N/A ... {"input_i" : "-27.85", "input_tp" : "-3.10", "input_lra" : "5.20", "output_i" : "-16.00"}'
     monkeypatch.setattr(loudness.subprocess, "run", lambda *a, **k: SimpleNamespace(stderr=stderr))
     assert loudness.measure_file(f) == {"lufs": -27.9, "tp": -3.1, "lra": 5.2}
@@ -25,9 +26,70 @@ def test_measure_file_rejects_non_finite(tmp_path, monkeypatch):
     f = tmp_path / "a.mp4"
     f.write_bytes(b"x")
     monkeypatch.setattr(loudness, "ffmpeg_path", lambda: "ffmpeg")
+    monkeypatch.setattr(loudness, "ffprobe_path", lambda: None)
     monkeypatch.setattr(loudness.subprocess, "run",
                         lambda *a, **k: SimpleNamespace(stderr='{"input_i":"-inf","input_tp":"-inf","input_lra":"0.0"}'))
     assert loudness.measure_file(f) is None
+
+
+def _offsets(tmp_path, monkeypatch, duration, results):
+    """The offsets measure_file hands _run for a file `duration` seconds long (None: unknown),
+    with _run answering from `results` in turn."""
+    f = tmp_path / "a.mp4"
+    f.write_bytes(b"x")
+    monkeypatch.setattr(loudness, "ffmpeg_path", lambda: "ffmpeg")
+    monkeypatch.setattr(loudness, "ffprobe_path", lambda: "ffprobe")
+    probe = SimpleNamespace(stdout="N/A\n" if duration is None else f"{duration}\n", stderr="")
+    monkeypatch.setattr(loudness.subprocess, "run", lambda *a, **k: probe)
+    calls, answers = [], iter(results)
+
+    def fake_run(ffmpeg, path, offset, window):
+        calls.append((offset, window))
+        return next(answers)
+
+    monkeypatch.setattr(loudness, "_run", fake_run)
+    return loudness.measure_file(f), calls
+
+
+VALUES = {"lufs": -25.1, "tp": -2.0, "lra": 6.0}
+
+
+def test_short_files_are_measured_from_the_start(tmp_path, monkeypatch):
+    for duration in (120, 192):  # under 3 min, and the 3-4 min band that used to hit the tail
+        values, calls = _offsets(tmp_path, monkeypatch, duration, [VALUES])
+        assert values == VALUES and calls == [(0, 420)], duration
+
+
+def test_window_moves_earlier_to_fit_before_the_end(tmp_path, monkeypatch):
+    assert _offsets(tmp_path, monkeypatch, 500, [VALUES])[1] == [(80, 420)]
+    assert _offsets(tmp_path, monkeypatch, 500.0, [VALUES])[1] == [(80, 420)]
+
+
+def test_long_files_keep_the_usual_offset(tmp_path, monkeypatch):
+    assert _offsets(tmp_path, monkeypatch, 1800, [VALUES])[1] == [(180, 420)]
+
+
+def test_unknown_duration_keeps_the_old_offset_and_fallback(tmp_path, monkeypatch):
+    values, calls = _offsets(tmp_path, monkeypatch, None, [None, VALUES])
+    assert values == VALUES and calls == [(180, 420), (0, 420)]
+
+
+def test_duration_when_ffprobe_is_missing_or_fails(tmp_path, monkeypatch):
+    f = tmp_path / "a.mp4"
+    monkeypatch.setattr(loudness, "ffprobe_path", lambda: None)
+    assert loudness._duration(f) is None
+    monkeypatch.setattr(loudness, "ffprobe_path", lambda: "ffprobe")
+
+    def boom(*a, **k):
+        raise OSError("no such file")
+
+    monkeypatch.setattr(loudness.subprocess, "run", boom)
+    assert loudness._duration(f) is None
+    for out in ("", "N/A", "nan", "inf", "0"):
+        monkeypatch.setattr(loudness.subprocess, "run", lambda *a, o=out, **k: SimpleNamespace(stdout=o))
+        assert loudness._duration(f) is None, out
+    monkeypatch.setattr(loudness.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout="192.042000\n"))
+    assert loudness._duration(f) == 192.042
 
 
 def test_measure_file_without_ffmpeg_returns_none(tmp_path, monkeypatch):
