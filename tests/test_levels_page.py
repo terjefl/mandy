@@ -41,14 +41,14 @@ def test_levels_page_is_public_safe_and_in_english(tmp_path):
         assert word not in text, word
 
 
-def test_levels_table_is_quietest_first_and_skips_unmeasured(tmp_path):
+def test_levels_table_is_newest_first_and_skips_unmeasured(tmp_path):
     cfg = _cfg(tmp_path)
     rows = _rows(tmp_path, cfg, [("Mid", -20.0), ("Unmeasured", None), ("Quiet", -31.0), ("Loud", -14.0)])
     rows.append(web.Row("Mandy Cane Lane", "Mandy Cane Lane", 2026, 1, "No file", "2026-01-01",
                         False, None, "", "", "9", source="youtube"))
     html = levels_page.render_levels(rows, cfg, cfg.creators[0])
     titles = re.findall(r'<td class="title">([^<]*)</td>', html)
-    assert titles == ["Quiet", "Mid", "Loud"]
+    assert titles == ["Loud", "Quiet", "Mid"]  # by date, newest first
     assert 'class="lufs low"' in html and 'class="lufs mid"' in html and 'class="lufs good"' in html
 
 
