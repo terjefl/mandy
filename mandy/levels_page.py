@@ -27,7 +27,7 @@ def _num(value: float) -> str:
 
 
 def entries(rows: list, cfg: Config, creator: CreatorConfig) -> list[dict]:
-    """One entry per measured video, quietest first."""
+    """One entry per measured video, newest first."""
     store = LoudnessStore(cfg, creator)
     out = []
     for r in rows:
@@ -41,7 +41,7 @@ def entries(rows: list, cfg: Config, creator: CreatorConfig) -> list[dict]:
             "show": show, "code": r.code, "title": r.title, "aired": r.aired,
             "lufs": float(info["lufs"]), "tp": info.get("tp"),
         })
-    out.sort(key=lambda e: (e["lufs"], e["aired"], e["title"]))
+    out.sort(key=lambda e: (e["aired"] or "", e["code"] or "", e["title"] or ""), reverse=True)
     return out
 
 
@@ -156,7 +156,7 @@ def render_levels(rows: list, cfg: Config, creator: CreatorConfig) -> str:
             f'<span><span class="key mid"></span>−18 to −{abs(LOW_LUFS)}</span>'
             f'<span><span class="key low"></span>under −{abs(LOW_LUFS)}</span></div>'
             f'{_histogram(values)}</section>'
-            f'<section><h2>Every video, quietest first</h2>{_table(items)}</section>'
+            f'<section><h2>Every video, newest first</h2>{_table(items)}</section>'
         )
     else:
         body = (
